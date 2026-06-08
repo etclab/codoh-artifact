@@ -28,6 +28,10 @@ PROXY_CONF="$COREDNS/Corefile.proxy"
 QUERY_DOMAINS="${QUERY_DOMAINS:-$ART_ROOT/domains-query.csv}"
 COVER_DOMAINS="${COVER_DOMAINS:-$ART_ROOT/domains-cover.csv}"
 SOCK=/tmp/codoh-enclave.sock
+# Recursive resolver for both the real query (target `upstream`) and cover
+# resolution. Override on egress-restricted hosts, e.g. `RESOLVER=10.0.0.53:53`.
+RESOLVER="${RESOLVER:-8.8.8.8:53}"
+TARGET_CONF_RUN=/tmp/codoh-target-sim.Corefile
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
@@ -40,7 +44,7 @@ cleanup() {
     [ -n "$TARGET_PID" ]  && kill "$TARGET_PID"  2>/dev/null
     [ -n "$ENCLAVE_PID" ] && kill "$ENCLAVE_PID" 2>/dev/null
     pkill -f 'enclave-sim --socket /tmp/codoh-enclave.sock' 2>/dev/null
-    rm -f "$SOCK"
+    rm -f "$SOCK" "$TARGET_CONF_RUN"
 }
 trap cleanup EXIT
 
@@ -78,13 +82,16 @@ grep -q "simulation mode" /tmp/enclave.log && log "Enclave in simulation mode (n
     || warn "Could not confirm simulation mode (see /tmp/enclave.log)"
 
 # --- 2. target ---
-log "Starting target (codohtarget, k=3 covers, upstream 8.8.8.8)..."
+# Render the sim Corefile with the chosen recursive resolver (RESOLVER applies to
+# both the real-query `upstream` and cover resolution, so one knob covers both).
+sed "s|upstream 8.8.8.8:53|upstream $RESOLVER|" "$TARGET_CONF" > "$TARGET_CONF_RUN"
+log "Starting target (codohtarget, k=3 covers, resolver $RESOLVER)..."
 CODOH_COVER_COUNT=3 \
 CODOH_COVER_DOMAIN_FILE="$COVER_DOMAINS" \
 CODOH_PROXY_CALLBACK_URL=https://127.0.0.1:8080 \
-CODOH_COVER_RESOLVER=8.8.8.8:53 \
+CODOH_COVER_RESOLVER="$RESOLVER" \
 CODOH_COVER_TIMEOUT_MS=2000 \
-    ./coredns-test -conf "$TARGET_CONF" >/tmp/target.log 2>&1 &
+    ./coredns-test -conf "$TARGET_CONF_RUN" >/tmp/target.log 2>&1 &
 TARGET_PID=$!
 sleep 3
 kill -0 "$TARGET_PID" 2>/dev/null || { cat /tmp/target.log; fail "target exited"; }

@@ -51,6 +51,8 @@ section "4/5 Leakage simulator (codoh-evals)"
     for t in trace_loader enclave trial hand_checked closed_form lens_c; do
         python3 -m sim.tests.test_$t && echo "  ok: test_$t"
     done
+    # test_cover.py is pytest-style (fixtures), so run it under pytest.
+    python3 -m pytest -q sim/tests/test_cover.py && echo "  ok: test_cover"
 )
 record "leakage simulator unit tests" "$?"
 
@@ -58,7 +60,9 @@ record "leakage simulator unit tests" "$?"
 section "5/5 End-to-end CODoH query (SGX simulation mode)"
 E2E_OUT="$(bash scripts/run-codoh-sim.sh 2>&1)"
 echo "$E2E_OUT"
-echo "$E2E_OUT" | grep -q 'E2E_RESULT=PASS' && rc=0 || rc=1
+# Anchor to end-of-line so PASS-NOHIT (queries OK but 0% cache hit) does NOT
+# count as a pass — §5 must demonstrate the miss -> hit transition.
+echo "$E2E_OUT" | grep -q 'E2E_RESULT=PASS$' && rc=0 || rc=1
 record "end-to-end CODoH query (miss -> hit)" "$rc"
 
 # --------------------------------------------------------------- summary -----

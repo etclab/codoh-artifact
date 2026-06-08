@@ -37,8 +37,8 @@ paper, organized as five Git submodules under [`repos/`](repos):
 
 | Submodule | Role in the paper | Backs |
 | --- | --- | --- |
-| [`repos/coredns`](repos/coredns) | CODoH server: `codohproxy` + `codohtarget` CoreDNS plugins and the SGX enclave (EGo), plus the benchmark and Azure testbed scripts. | §6 Implementation; Table 2 (latency); Tables 3–6 (microbenchmarks); latency CDFs |
-| [`repos/codoh-client`](repos/codoh-client) | CODoH client and latency benchmark tool (a fork of Cloudflare `odoh-client-go`). | §7 measurement client; Table 2 driver |
+| [`repos/coredns`](repos/coredns) | CODoH server: `codohproxy` + `codohtarget` CoreDNS plugins and the SGX enclave (EGo), plus the benchmark and Azure testbed scripts. | §6 Implementation; Table 3 (latency); Tables 4–7 (microbenchmarks); latency CDFs |
+| [`repos/codoh-client`](repos/codoh-client) | CODoH client and latency benchmark tool (a fork of Cloudflare `odoh-client-go`). | §7 measurement client; Table 3 driver |
 | [`repos/dnscrypt-proxy`](repos/dnscrypt-proxy) | Local DNS proxy with CODoH support; drives real browser page loads. | §7 Page-Load Benchmarks (per-site figure) |
 | [`repos/codoh-evals`](repos/codoh-evals) | Trace-driven leakage simulator (lenses a–d) + plotting; Playwright crawl harness. | §7 Leakage under Realistic Workloads; App. leakage and cover-drift figures |
 | [`repos/pathoram-go`](repos/pathoram-go) | Path ORAM library used as the enclave's oblivious cache backend. | §6 ORAM cache; Table 6 (PathORAM vs. linear scan) |
@@ -75,8 +75,8 @@ x86-64 machine. No special hardware is required — the SGX enclave runs in
 Recommended: 4 CPU cores, 8 GB RAM, 15 GB free disk.
 
 **For reproducing the paper's hardware-dependent results (not claimed here):**
-the latency results (Table 2), the SGX columns of the microbenchmark tables
-(Tables 3–5), and the page-load figure were produced on an Azure testbed of
+the latency results (Table 3), the SGX columns of the microbenchmark tables
+(Tables 4, 5, and 7), and the page-load figure were produced on an Azure testbed of
 three VMs in separate US regions:
 
 - **Proxy:** Standard DC4s v2 (4 vCPU, 16 GiB, 112 MiB EPC) **with Intel SGX**.
@@ -192,6 +192,13 @@ each. It performs:
    target, and proxy locally and issues CODoH queries with the client,
    demonstrating a cache miss followed by a cache hit.
 
+> **Network requirement (§5 only):** the end-to-end test resolves real domains,
+> so it needs **outbound UDP/53** to a recursive resolver (default `8.8.8.8:53`).
+> On an egress-restricted host, point it at a reachable resolver via the
+> `RESOLVER` env var (it applies to both the real query and cover resolution):
+> `docker run --rm -e RESOLVER=<host:53> codoh:artifact ./test.sh`.
+> Sections 1–4 need no network.
+
 The smoke test deliberately runs only unit tests and the end-to-end query — it
 does not run the (slow) benchmarks or parameter sweeps. Per-operation
 microbenchmarks and the leakage-figure regeneration are available as separate
@@ -215,10 +222,10 @@ This artifact requests the **Available** and **Functional** badges, not
 **Reproduced**. The following paper results are *not* reproducible on commodity
 hardware and are therefore out of scope for evaluation:
 
-- **End-to-end latency (Table 2) and the page-load figure** require the
+- **End-to-end latency (Table 3) and the page-load figure** require the
   three-VM, cross-region Azure testbed with an SGX-capable proxy; the numbers are
   sensitive to wide-area network latency between specific Azure regions.
-- **The SGX columns of Tables 3–5** (per-operation latency *inside* the enclave,
+- **The SGX columns of Tables 4, 5, and 7** (per-operation latency *inside* the enclave,
   cache access under SGX, IPC under SGX) require running on real Intel SGX
   hardware via EGo; in simulation mode there is no enclave-transition or EPC
   paging cost to measure.
@@ -228,9 +235,10 @@ works: the complete CODoH protocol runs end-to-end (enclave cache lookup, cover
 insertion, ORAM-backed storage, batched commits, padding, and client
 decryption), and the leakage analysis that underpins the paper's parameter
 recommendations is reproduced from the included data. The plain-mode
-microbenchmark columns (Tables 3–4, 6) are also reproducible on the evaluator's
-CPU. The scripts for the full hardware experiments are included for completeness
-and reuse (see below).
+microbenchmark columns (Table 4, plus the plain-mode oblivious-primitive results
+in Table 10) are also reproducible on the evaluator's CPU (see
+[Notes on Reusability](#notes-on-reusability) for the commands). The scripts for
+the full hardware experiments are included for completeness and reuse (see below).
 
 ## Notes on Reusability
 
@@ -247,32 +255,71 @@ The components are useful beyond this paper:
   buffer, attacker model, and parameter-sweep driver are modular, and new
   workloads can be supplied as DNS-trace CSVs.
 
-- **Regenerating the leakage figures from shipped data.** The full parameter
-  sweeps in the paper take many CPU-hours, so we ship the precomputed aggregate
-  CSVs alongside the simulator. From `repos/codoh-evals`, the paper's leakage
-  figures regenerate in seconds (needs `matplotlib`/`numpy`, both in the Docker
-  image):
+- **Terminology: the simulator's "lenses" (a)–(d).** The simulator labels its
+  analyses **lens (a)–(d)** throughout its module names, CSV outputs, and console
+  output (including the smoke test's §4 lines and the `analyze_*` / `plot_*`
+  scripts). The paper never uses the word "lens" — these are internal names for
+  the four questions the paper poses in its §"Leakage under Realistic Workloads":
+  - **lens (a)** ↔ *"Single batch: popular vs. tail queries"* —
+    can a single batch identify the victim's page, stratified by popularity band
+    (`analyze_a.py`, `lens_a.csv`).
+  - **lens (b)** ↔ *"Within a page load"* — does the union of batches a page load
+    spans leak the page (`analyze_b.py`, `lens_b.csv`, `plot_heatmap.py`).
+  - **lens (c)** ↔ *"Returning user: cross-day intersection"* — how fast a stable
+    daily repertoire becomes identifiable, via the day-7 intersection size
+    `|C_7|` (`lens_c.py`, `plot_lens_c.py`, `plot_lens_c_heatmap.py`).
+  - **lens (d)** ↔ *"Cover-distribution drift"* — how much (a)–(c) depend on the
+    cover distribution matching the query distribution. In the code this is the
+    **`dsens` / D-sensitivity** analysis (`plot_dsens.py`, `plot_dsens_tiers.py`);
+    it is not a separate attack but a re-run of (a)–(c) with cover distribution
+    `D ∈ {matched, uniform, stale}`. (There is no `lens_d.py`.)
+
+  The Strict/Moderate/Permissive **operator tiers** (in `plot_lens_c_heatmap.py`,
+  keyed on median `|C_7|`) correspond to the paper's "Operator-tier
+  recommendation."
+
+- **Regenerating the paper's leakage figures from shipped data.** The full
+  parameter sweeps take many CPU-hours, so we ship the precomputed aggregate CSVs
+  alongside the simulator (only those needed for the paper's figures). The three
+  simulator figures in the paper's appendix regenerate in seconds
+  (`matplotlib`/`numpy` are in the image). Mount a host directory as `/figs` so
+  the outputs land on the host:
 
   ```bash
-  cd repos/codoh-evals
-  # Lens-(b) (B, T_max) heatmap (writes out/default/agg/heatmap_top5_acc.png):
-  python3 -m sim.plot_heatmap --out-dir out/default --metric top5_acc
-  # Returning-user cross-day intersection (3-panel |C_7|):
-  python3 -m sim.plot_lens_c         --users-csv out_lensc_merged/agg/lens_c_users.csv \
-                                     --out /tmp/lens_c.pdf --png /tmp/lens_c.png
-  python3 -m sim.plot_lens_c_heatmap --users-csv out_lensc_merged/agg/lens_c_users.csv \
-                                     --out /tmp/lens_c_heatmap.pdf --png /tmp/lens_c_heatmap.png
-  # Cover-distribution sensitivity (cross-tier, Appendix):
-  python3 -m sim.plot_dsens_tiers --out /tmp/dsens_tiers.pdf
+  mkdir -p figs-out
+  docker run --rm -v "$PWD/figs-out:/figs" codoh:artifact bash -c '
+    cd repos/codoh-evals
+    # Returning-user cross-day intersection, 3-panel |C_7|  (paper fig. lens_c_intersect_final):
+    python3 -m sim.plot_lens_c         --users-csv out_lensc_merged/agg/lens_c_users.csv \
+                                       --out /figs/lens_c_intersect_final.pdf --png /figs/lens_c_intersect_final.png
+    # Returning-user (B, T_max) heatmap with operator tiers  (paper fig. lens_c_heatmap_BTmax):
+    python3 -m sim.plot_lens_c_heatmap --users-csv out_lensc_merged/agg/lens_c_users.csv \
+                                       --out /figs/lens_c_heatmap_BTmax.pdf --png /figs/lens_c_heatmap_BTmax.png
+    # Cover-distribution sensitivity, cross-tier  (paper fig. dsens_tiers):
+    python3 -m sim.plot_dsens_tiers    --results results --out /figs/dsens_tiers.pdf
+  '
+  ls figs-out/   # the three figures (.pdf + .png) are now on the host
   ```
 
-  (`plot_heatmap` additionally prints an internal regression line such as
-  `[gate] top1 gradient = … (FAIL; threshold 0.1)`; this is a sweep-quality
-  signal for the developers, **not** an artifact-evaluation pass/fail — the
-  command still exits 0 and writes the figure.)
+  Each plot script also accepts a custom `--out`/`--png` path if run inside an
+  interactive container. To re-run the underlying sweeps instead of using the
+  shipped aggregates, see `repos/codoh-evals/README.md` (the full default sweep is
+  multi-hour).
 
-  To re-run the underlying sweep instead of using the shipped aggregates, see
-  `repos/codoh-evals/README.md` (note: the full default sweep is multi-hour).
+- **Reproducing the plain-mode (non-SGX) microbenchmark columns.** The CPU-only
+  columns of the paper's microbenchmark tables run on the evaluator's host (no
+  SGX needed). These are not part of the smoke test, but can be run directly:
+
+  ```bash
+  # Per-operation crypto + cache latency (plain columns of Tables 4 and 5):
+  cd repos/coredns   && go test -run=NONE -bench=. ./enclave/
+  # PathORAM vs. linear scan, plain mode (Table 10 / plain column of Table 6):
+  cd repos/pathoram-go && go test -run=NONE -bench='Access|LinearScan' ./...
+  ```
+
+  The SGX columns of these tables are hardware-gated and out of scope (see
+  [Limitations](#limitations)).
+
 - **Reproducing the full paper on your own SGX hardware.** With an SGX-capable
   Azure VM (or equivalent) and the EGo SDK installed, the testbed can be
   provisioned and run end-to-end:
