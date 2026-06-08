@@ -96,15 +96,16 @@ hardware.
   works for the functional test; macOS/Windows via Docker Desktop should also
   work but are untested.
 - **Container runtime:** Docker 24+ (the artifact ships a pinned `Dockerfile`).
-- **Languages (provided inside the image):** Go 1.25 and Python 3.12.
+- **Languages (provided inside the image):** Go 1.25 and Python 3.11.
 - **SGX toolchain (only for real-hardware runs, not the functional test):**
   EGo 1.8.1.
 - **Go dependencies:** pinned in each submodule's `go.mod` / `go.sum` (notably
   `github.com/cloudflare/circl` for HPKE, `github.com/cloudflare/odoh-go`, and
   `github.com/etclab/pathoram-go`).
 - **Python dependencies:** the leakage simulator (`repos/codoh-evals/sim`) is
-  **stdlib-only**; plotting needs `matplotlib` and `numpy` (installed in the
-  image). Re-crawling page loads needs Playwright (not exercised by the
+  **stdlib-only** and runs on Python ≥ 3.10 (the Docker image ships Python 3.11
+  from Debian bookworm); plotting needs `matplotlib` and `numpy` (installed in
+  the image). Re-crawling page loads needs Playwright (not exercised by the
   functional test).
 - **Datasets:** all data needed for the functional test is included in the
   submodules — the leakage simulator's input traces and aggregated CSVs are
@@ -119,9 +120,9 @@ hardware.
 | --- | --- | --- | --- |
 | `git clone --recursive` | 2 min | ~3 min | ~3 GB |
 | `docker build` | 2 min | 10–20 min | ~5 GB image |
-| `./test.sh` (full smoke test) | 5 min | ~5–10 min | <1 GB |
+| `./test.sh` (full smoke test) | 2 min | ~1–2 min | <1 GB |
 
-Total: roughly **15 minutes of human time** and **under 35 minutes of compute**,
+Total: roughly **10 minutes of human time** and **under 25 minutes of compute**,
 on **~10–15 GB** of disk.
 
 ## Environment
@@ -162,6 +163,11 @@ The build compiles every component (server, enclave in simulation mode, client,
 Path ORAM library, and the Python simulator dependencies) inside the image, so
 there is nothing to install on the host beyond Docker.
 
+> **Note:** the submodules are pinned to the `pets26-artifact` tag via their
+> recorded commit (gitlink); `.gitmodules` intentionally sets no tracking
+> `branch`. Use `git submodule update --init --recursive` as above — do **not**
+> pass `--remote`, which would move the submodules off the pinned commits.
+
 ### Testing the Environment
 
 Run the bundled smoke test inside the container:
@@ -175,25 +181,33 @@ each. It performs:
 
 1. **Build check** — confirms the server, simulation enclave, client, and ORAM
    library all compile.
-2. **Path ORAM** — runs the `pathoram-go` unit tests and a short benchmark.
-3. **Enclave microbenchmarks (plain mode)** — runs the HPKE / AES-GCM / cache
-   `go test -bench` microbenchmarks that back Tables 3–4 (CPU-only columns).
-4. **Leakage simulator** — runs the `sim` unit tests and regenerates one
-   Appendix leakage figure from the checked-in aggregated CSVs.
+2. **Path ORAM** — runs the `pathoram-go` unit tests.
+3. **Enclave logic** — runs the `enclave` and `codohtarget` (incl. cover
+   sampler) unit tests, covering HPKE, AES-GCM, the LRU/ORAM cache, and
+   cache-insert bundle handling.
+4. **Leakage simulator** — runs the `sim` unit tests (batch buffer, cover
+   sampler, strong-attacker scoring, and the lens-(a)/(b)/(c) drivers), including
+   closed-form-vs-Monte-Carlo cross-checks.
 5. **End-to-end CODoH query (SGX simulation mode)** — launches the enclave,
    target, and proxy locally and issues CODoH queries with the client,
    demonstrating a cache miss followed by a cache hit.
 
+The smoke test deliberately runs only unit tests and the end-to-end query — it
+does not run the (slow) benchmarks or parameter sweeps. Per-operation
+microbenchmarks and the leakage-figure regeneration are available as separate
+commands documented in [Notes on Reusability](#notes-on-reusability).
+
 Expected output ends with:
 
 ```
-=== CODoH artifact smoke test: ALL CHECKS PASSED ===
+=== CODoH artifact smoke test: ALL CHECKS PASSED (5/5) ===
 ```
 
-Each section also prints concrete results (e.g., the simulator's day-7
-intersection statistics, ORAM benchmark timings, and the client's measured cache
-hit rate on the warm query), so the evaluator can confirm the components behave
-as described in the paper rather than merely exiting zero.
+Each section also prints concrete results (e.g., the simulator's
+closed-form-vs-Monte-Carlo agreement and lens-(c) cross-day posteriors, the unit
+test timings, and the client's measured cache hit rate on the warm query), so the
+evaluator can confirm the components behave as described in the paper rather than
+merely exiting zero. The full run takes roughly **1–2 minutes**.
 
 ## Limitations
 
@@ -241,14 +255,21 @@ The components are useful beyond this paper:
 
   ```bash
   cd repos/codoh-evals
-  # Lens-(b) (B, T_max) heatmap:
+  # Lens-(b) (B, T_max) heatmap (writes out/default/agg/heatmap_top5_acc.png):
   python3 -m sim.plot_heatmap --out-dir out/default --metric top5_acc
   # Returning-user cross-day intersection (3-panel |C_7|):
-  python3 -m sim.plot_lens_c       --users-csv out_lensc_merged/agg/lens_c_users.csv
-  python3 -m sim.plot_lens_c_heatmap --users-csv out_lensc_merged/agg/lens_c_users.csv
+  python3 -m sim.plot_lens_c         --users-csv out_lensc_merged/agg/lens_c_users.csv \
+                                     --out /tmp/lens_c.pdf --png /tmp/lens_c.png
+  python3 -m sim.plot_lens_c_heatmap --users-csv out_lensc_merged/agg/lens_c_users.csv \
+                                     --out /tmp/lens_c_heatmap.pdf --png /tmp/lens_c_heatmap.png
   # Cover-distribution sensitivity (cross-tier, Appendix):
-  python3 -m sim.plot_dsens_tiers --out figs/dsens_tiers.pdf
+  python3 -m sim.plot_dsens_tiers --out /tmp/dsens_tiers.pdf
   ```
+
+  (`plot_heatmap` additionally prints an internal regression line such as
+  `[gate] top1 gradient = … (FAIL; threshold 0.1)`; this is a sweep-quality
+  signal for the developers, **not** an artifact-evaluation pass/fail — the
+  command still exits 0 and writes the figure.)
 
   To re-run the underlying sweep instead of using the shipped aggregates, see
   `repos/codoh-evals/README.md` (note: the full default sweep is multi-hour).

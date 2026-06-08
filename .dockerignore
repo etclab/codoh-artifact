@@ -7,7 +7,11 @@ scratch/
 *.log
 test-output/
 out_smoke/
-repos/codoh-evals/out_*/
+# Exclude only the bulky raw per-trial sweep dumps, NOT the small aggregate CSVs
+# (e.g. out_lensc_merged/agg/lens_c_users.csv) that the reuse plot commands need.
+repos/codoh-evals/out_smoke/
+repos/codoh-evals/out_*/raw/
+repos/codoh-evals/out/*/raw/
 
 # Decompressed CrUX cover universe — the Dockerfile regenerates it from the .gz.
 repos/codoh-evals/data/crux-202603.csv
