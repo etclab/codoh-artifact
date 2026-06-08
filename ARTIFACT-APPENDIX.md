@@ -107,6 +107,15 @@ hardware.
   from Debian bookworm); plotting needs `matplotlib` and `numpy` (installed in
   the image). Re-crawling page loads needs Playwright (not exercised by the
   functional test).
+- **Host plotting tools (only for re-rendering the archived figures in
+  [`paper-results/`](paper-results)):** `gnuplot` and an EPS→PDF converter
+  (`epstopdf` from `texlive-font-utils`, or `ps2pdf` from `ghostscript`) —
+  e.g. `apt-get install gnuplot texlive-font-utils`. These are **not** in the
+  Docker image and are not needed for the functional test; the regenerated
+  *tables* and the leakage *figures* need only the in-image `python3`/`matplotlib`.
+  `gnuplot` + `epstopdf` are used solely to re-render the latency-CDF, page-load,
+  and DNS-CDF figures from the shipped data (see
+  [`paper-results/README.md`](paper-results/README.md)).
 - **Datasets:** all data needed for the functional test is included in the
   submodules — the leakage simulator's input traces and aggregated CSVs are
   checked in (the CrUX Top-1M cover universe is shipped gzipped at
@@ -215,6 +224,103 @@ closed-form-vs-Monte-Carlo agreement and lens-(c) cross-day posteriors, the unit
 test timings, and the client's measured cache hit rate on the warm query), so the
 evaluator can confirm the components behave as described in the paper rather than
 merely exiting zero. The full run takes roughly **1–2 minutes**.
+
+## Artifact Evaluation
+
+This section maps the artifact to the paper's claims. Each claim is tagged
+**[Demonstrated]** (the functional test shows the behavior), **[Reproduced on
+commodity HW]** (the paper's *numbers* regenerate on the evaluator's machine), or
+**[Hardware-gated]** (needs the SGX/Azure testbed — out of scope for the requested
+*Available + Functional* badges; see [Limitations](#limitations)).
+
+### Main Results and Claims
+
+#### Main Result 1: Cacheable, end-to-end-encrypted ODoH  *[Demonstrated]*
+A repeated query is served from the proxy-side enclave cache (cache **hit**) with
+no upstream resolution, while the proxy never observes plaintext queries or
+responses (end-to-end HPKE). This is the core design claim of §4–§6. Demonstrated
+by **Experiment 1**; it is also the cache-hit fast path underlying the warm-workload
+numbers in Table 3 (those magnitudes are hardware-gated — see Main Result 3).
+
+#### Main Result 2: Defense mechanisms implemented and correct  *[Demonstrated]*
+Cover responses (k), batched commits (B, p), the Path ORAM cache, and bucketed
+padding all function as described in §4–§5. Verified by **Experiment 2** (unit
+tests) and exercised end-to-end by **Experiment 1**.
+
+#### Main Result 3: End-to-end latency (Table 3)  *[Hardware-gated]*
+Warm ≈ 0.37× ODoH (2.67× speedup), Zipf ≈ 0.46×, cold ≈ 0.90×; SGX adds <1 ms at
+the median on cache-hit workloads. Requires the three-VM cross-region Azure
+testbed with an SGX proxy. **Out of scope**; the cache-hit path it builds on is
+shown functionally by Experiment 1. Scripts: `benchmark/cloud-*.sh` (see
+[Notes on Reusability](#notes-on-reusability)). The authors' measured run — raw
+per-query latencies, the exact Table 3 percentiles, and the CDF figures — is
+shipped in [`paper-results/`](paper-results) for inspection and re-plotting.
+
+#### Main Result 4: Per-operation microbenchmarks (Tables 4–8)  *[partly Reproduced]*
+The **Plain (non-SGX) columns** of Table 4 (crypto) and Table 5 (cache), and the
+plain-mode PathORAM-vs-linear-scan crossover (Table 10, plain counterpart of
+Table 6) reproduce on the evaluator's CPU — **Experiment 4**. The **SGX columns**
+of Tables 4, 5, 6, and 7 are **Hardware-gated**. The authors' own plain-column
+runs are archived in [`paper-results/`](paper-results) for inspection.
+
+#### Main Result 5: Leakage under realistic workloads (§7; appendix figures)  *[Reproduced on commodity HW]*
+The simulator's quantitative findings behind the paper's parameter recommendations:
+- (i) one batch identifies the page in 8–14% of batches at B ≤ 20, <1% at B ≥ 50, 0 at B ≥ 100;
+- (ii) a full page load is still protected at B ≥ 50;
+- (iii) cross-day intersection: cover count k is decisive — k = 1 fingerprints ~37% of users (11 of 30) within 7 days, justifying the default k = 3;
+- (iv) cover-distribution drift (D ≠ Q) breaks page-load privacy at every B, so D ≈ Q is a deployment requirement;
+- operator tiers *Strict / Moderate / Permissive* at B ≥ 256 / 50 / 20.
+
+Reproduced from shipped aggregate CSVs by **Experiment 3** (regenerates appendix
+figures `lens_c_intersect_final`, `lens_c_heatmap_BTmax`, `dsens_tiers`); the
+simulator's closed-form-vs-Monte-Carlo agreement is re-derived in **Experiment 2**.
+
+### Experiments
+
+#### Experiment 1: End-to-end CODoH query, cache miss → hit (SGX simulation mode)
+*Steps.* `docker run --rm codoh:artifact ./test.sh` and read **section 5** (or run
+`scripts/run-codoh-sim.sh` directly). On an egress-restricted host, add
+`-e RESOLVER=<host:53>`.
+*Expected.* Section 5 prints a cold query **MISS** followed by a warm query **HIT**
+(~100% hit rate on the warm query), and the run ends with
+`=== CODoH artifact smoke test: ALL CHECKS PASSED (5/5) ===`. Proxy logs show only
+ciphertext.
+*Time / disk.* ~1–2 min compute (whole test), ~2 min human; <1 GB beyond the image.
+*Supports.* Main Result 1 — shows the protocol resolves, caches, and serves a hit
+end-to-end with end-to-end encryption.
+
+#### Experiment 2: Component and simulator unit tests
+*Steps.* Covered by `./test.sh` **sections 1–4**.
+*Expected.* All sections PASS; section 4 prints the closed-form-vs-Monte-Carlo
+agreement and lens-(c) cross-day posteriors.
+*Time / disk.* <1 min; <1 GB.
+*Supports.* Main Result 2 and the simulator-correctness basis of Main Result 5 —
+confirms HPKE/AES-GCM, the LRU/ORAM cache, the cover sampler, the batch buffer, and
+the attacker scoring are correct.
+
+#### Experiment 3: Regenerate the paper's leakage figures from shipped data
+*Steps.* Run the figure-regeneration block in
+[Notes on Reusability](#notes-on-reusability) ("Regenerating the paper's leakage
+figures from shipped data"), which mounts `/figs` and runs `plot_lens_c`,
+`plot_lens_c_heatmap`, and `plot_dsens_tiers`.
+*Expected.* Three figures matching the appendix: `lens_c_intersect_final.pdf`
+(Fig. cross-day intersection), `lens_c_heatmap_BTmax.pdf` (the (B, T_max) heatmap),
+`dsens_tiers.pdf` (cover-distribution sensitivity). The k = 1 vs k = 3 separation
+and the Strict/Moderate/Permissive tier bands are visible.
+*Time / disk.* Seconds of compute; a few MB of output.
+*Supports.* Main Result 5 (i)–(iv) and the operator-tier recommendation,
+reproduced quantitatively from the shipped aggregate CSVs.
+
+#### Experiment 4: Plain-mode (non-SGX) microbenchmark columns
+*Steps.* Run the two `go test -bench` commands in
+[Notes on Reusability](#notes-on-reusability) ("Reproducing the plain-mode (non-SGX)
+microbenchmark columns").
+*Expected.* Per-operation crypto/cache latencies and the PathORAM-vs-linear-scan
+crossover in the regime of Tables 4/5 (Plain) and Table 10; the O(log N) ORAM,
+O(1) LRU, and O(N) linear-scan trends and the crossover region reproduce. Absolute
+µs differ from the paper (different CPU).
+*Time / disk.* A few minutes; a few MB.
+*Supports.* The Plain columns of Main Result 4.
 
 ## Limitations
 
@@ -338,3 +444,27 @@ The components are useful beyond this paper:
   matrix (Configs 1--5 over the cold/Zipf/warm workloads) and the
   figure/table generation pipeline; run them with `--help` for the available
   options.
+
+- **Authors' measured data for the hardware-dependent results.** So a reviewer can
+  inspect and re-plot the paper's measured numbers without renting the SGX/Azure
+  testbed, the authors' actual runs are archived under
+  [`paper-results/`](paper-results) as per-result tarballs (not bundled into the
+  Docker image — extract them from the cloned repository):
+  - `table3-latency-cdfs.tar.gz` — Table 3 latency: raw per-query CSVs, the exact
+    percentiles, and the appendix CDF figures (`cdf_warm`/`cdf_zipf`/`cdf_cold`).
+  - `tables4-8-microbench-plain.tar.gz` — the plain (non-SGX) columns of
+    Tables 4, 5, 7, and 8.
+  - `table9-sensitivity-sweep.tar.gz` — the ORAM-capacity / cover-count sweep
+    behind Table 9.
+  - `fig-pageload.tar.gz` — the per-site page-load figure (`plot_per_site`) data
+    (the figure's direct source; the raw Playwright runs were not preserved, so it
+    can be inspected and re-plotted but not re-aggregated from raw).
+  - `fig-dns-cdfs.tar.gz` — the response-size and TTL CDFs (appendix
+    `top-size-cdf` / `top-ttl-cdf`).
+
+  See [`paper-results/README.md`](paper-results/README.md) for the full
+  archive-to-figure/table map and the extract / verify / re-plot commands. The
+  leakage data (Main Result 5) is **not** archived there — it ships uncompressed in
+  `repos/codoh-evals` and regenerates via the figure commands above. The SGX
+  columns of Tables 4--7 and Table 10 are not recoverable from any repository (see
+  [Limitations](#limitations)).

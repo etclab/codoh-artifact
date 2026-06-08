@@ -15,3 +15,7 @@ repos/codoh-evals/out/*/raw/
 
 # Decompressed CrUX cover universe — the Dockerfile regenerates it from the .gz.
 repos/codoh-evals/data/crux-202603.csv
+
+# Authors' archived measurement data: for repo inspection / host-side re-plotting,
+# not needed by the functional test. Keeps the image lean.
+paper-results/
