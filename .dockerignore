@@ -1,0 +1,13 @@
+# Git metadata — not needed in the image, and avoids Go VCS stamping issues.
+.git
+**/.git
+
+# Host-side scratch, logs, and sweep outputs.
+scratch/
+*.log
+test-output/
+out_smoke/
+repos/codoh-evals/out_*/
+
+# Decompressed CrUX cover universe — the Dockerfile regenerates it from the .gz.
+repos/codoh-evals/data/crux-202603.csv

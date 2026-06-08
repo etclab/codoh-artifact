@@ -232,6 +232,26 @@ The components are useful beyond this paper:
   trace-driven analysis of batched-anonymity systems: the cover sampler, batch
   buffer, attacker model, and parameter-sweep driver are modular, and new
   workloads can be supplied as DNS-trace CSVs.
+
+- **Regenerating the leakage figures from shipped data.** The full parameter
+  sweeps in the paper take many CPU-hours, so we ship the precomputed aggregate
+  CSVs alongside the simulator. From `repos/codoh-evals`, the paper's leakage
+  figures regenerate in seconds (needs `matplotlib`/`numpy`, both in the Docker
+  image):
+
+  ```bash
+  cd repos/codoh-evals
+  # Lens-(b) (B, T_max) heatmap:
+  python3 -m sim.plot_heatmap --out-dir out/default --metric top5_acc
+  # Returning-user cross-day intersection (3-panel |C_7|):
+  python3 -m sim.plot_lens_c       --users-csv out_lensc_merged/agg/lens_c_users.csv
+  python3 -m sim.plot_lens_c_heatmap --users-csv out_lensc_merged/agg/lens_c_users.csv
+  # Cover-distribution sensitivity (cross-tier, Appendix):
+  python3 -m sim.plot_dsens_tiers --out figs/dsens_tiers.pdf
+  ```
+
+  To re-run the underlying sweep instead of using the shipped aggregates, see
+  `repos/codoh-evals/README.md` (note: the full default sweep is multi-hour).
 - **Reproducing the full paper on your own SGX hardware.** With an SGX-capable
   Azure VM (or equivalent) and the EGo SDK installed, the testbed can be
   provisioned and run end-to-end:
@@ -246,5 +266,7 @@ The components are useful beyond this paper:
   ./benchmark/plot.sh benchmark/results/<run-id>           # regenerate CDFs/tables
   ```
 
-  See `repos/coredns/benchmark/BENCHMARK_SPEC.md` and `PLOT_SPEC.md` for the full
-  configuration/workload matrix and the figure/table generation pipeline.
+  The `cloud-run.sh` and `plot.sh` scripts cover the full configuration/workload
+  matrix (Configs 1--5 over the cold/Zipf/warm workloads) and the
+  figure/table generation pipeline; run them with `--help` for the available
+  options.

@@ -1,0 +1,20 @@
+# CODoH Target — SIMULATION mode (no SGX, no attestation).
+#
+# Differs from repos/coredns/Corefile.target only by omitting `enclave_url`,
+# which disables the attestation-based signing-key provisioning step (the enclave
+# runs in simulation mode and skips signature verification when no target key is
+# provisioned). The `upstream` directive is also omitted so it defaults to
+# 8.8.8.8:53, removing the need for a local Unbound resolver.
+
+.:25356 {
+    codohtarget {
+        port 8443
+        tls_cert localhost.pem
+        tls_key localhost-key.pem
+        signing_key /tmp/target-signing.pem
+        log_queries true
+    }
+
+    errors
+    log
+}
