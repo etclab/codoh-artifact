@@ -1,0 +1,14 @@
+# Local scratch / session notes
+scratch/
+
+# Build outputs produced inside the container or local test runs
+*.log
+/tmp/
+
+# Generated figures/results from local smoke-test runs (artifacts ship their own)
+out_smoke/
+test-output/
+
+# OS / editor cruft
+.DS_Store
+*.swp

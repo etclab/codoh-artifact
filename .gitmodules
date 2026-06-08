@@ -1,0 +1,15 @@
+[submodule "repos/coredns"]
+	path = repos/coredns
+	url = https://github.com/etclab/coredns.git
+[submodule "repos/codoh-client"]
+	path = repos/codoh-client
+	url = https://github.com/etclab/codoh-client.git
+[submodule "repos/dnscrypt-proxy"]
+	path = repos/dnscrypt-proxy
+	url = https://github.com/etclab/dnscrypt-proxy.git
+[submodule "repos/codoh-evals"]
+	path = repos/codoh-evals
+	url = https://github.com/etclab/codoh-evals.git
+[submodule "repos/pathoram-go"]
+	path = repos/pathoram-go
+	url = https://github.com/etclab/pathoram-go.git
