@@ -16,6 +16,13 @@ here — they ship uncompressed and git-tracked in
 
 Extract any archive with `tar xzf <name>.tar.gz`.
 
+**A note on item counts.** Across all experiments the benchmarks draw from domain
+lists **pre-filtered to domains that resolve** (≥1 `A` record), so the number of
+sites/domains/records in a data file may differ from the round "top-N" quoted in
+the paper. For example, the page-load figure has **74 of the 100** sampled sites
+(the rest didn't resolve or load), and the DNS response-size / TTL CDFs hold one
+row per resolved record. This is expected filtering, not a bug.
+
 ## Archive → paper result map
 
 | Archive | Backs (paper) | Key contents |
@@ -23,7 +30,7 @@ Extract any archive with `tar xzf <name>.tar.gz`.
 | `table3-latency-cdfs.tar.gz` | **Table 3** (end-to-end latency) + appendix latency CDF figures `cdf_warm`/`cdf_zipf`/`cdf_cold` | `multi-region-combined/raw/` — 15 per-query CSVs + 15 JSON summaries (5 configs × {cold,zipf,warm}); `plots/percentiles_trimmed.json` (the exact Table 3 p50/p95/p99); `plots/table_comparison.tex` (Table 3 as LaTeX); `plots/*.cdf` (per-config CDF data); `plots/cdf_*.pdf` (rendered figures); `plots/cdf_*.gp` (gnuplot) |
 | `tables4-8-microbench-plain.tar.gz` | **Plain (non-SGX) columns** of **Table 4** (crypto), **Table 5** (cache), **Table 7** (IPC), **Table 8** (padding) | `crypto.txt`, `cache.txt`, `ipc.txt`, `padding.txt` — raw `go test -bench` / analyzer output |
 | `table9-sensitivity-sweep.tar.gz` | **Table 9** (sensitivity: ORAM `N ∈ {256,512,1024,2048}`, cover `k ∈ {1,3,5}`) | `param_sweep_20260514/raw/` (default `N=1024,k=3`) + `sweep_oram_{256,512,2048}/` + `sweep_cover_{1,5}/`, each {cold,zipf,warm} × CSV+JSON; `corefiles/`; `logs/`; `metadata.json` |
-| `fig-pageload.tar.gz` | Figure `plot_per_site` (page-load: CODoH vs ODoH, per site) | `cdf_codoh_per_site.dat`, `cdf_odoh_per_site.dat` (per-site trimmed-mean DNS + page-load times, 74 sites); `plot_per_site.gpi`; `style.gpi` |
+| `fig-pageload.tar.gz` | Figure `plot_per_site` (page-load: CODoH vs ODoH, per site) | `cdf_codoh_per_site.dat`, `cdf_odoh_per_site.dat` (per-site mean DNS + page-load times ± std, 74 sites); `plot_per_site.gpi`; `style.gpi` |
 | `fig-dns-cdfs.tar.gz` | Appendix figures `top-size-cdf`, `top-ttl-cdf` (response-size & TTL CDFs motivating the padding bucket and batch-interval choices) | `top-size-cdf.dat` (≈730k A-response sizes), `top-ttl-cdf.dat` (≈152k TTLs), the two `.gpi` scripts, `style.gpi` |
 
 ## Regenerate the paper's tables and figures from these archives
@@ -96,7 +103,8 @@ cd -
 These `.dat` files are exactly what the paper's `plot_per_site` figure plots —
 re-running the command above reproduces it, and the paper's conviva.com
 (3.0→2.5 s) and opera.com (1.3→1.18 s) figures are these values rounded. Each row
-is one site's mean and standard deviation across runs. 
+is one site's mean and standard deviation across runs (74 sites — see the note on
+item counts above). 
 
 ### Appendix DNS CDFs `top-size-cdf` / `top-ttl-cdf`  (`fig-dns-cdfs.tar.gz`)  — host, gnuplot
 

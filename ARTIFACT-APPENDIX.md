@@ -9,17 +9,13 @@ Requested Badge(s):
 
 ## Description
 
-This artifact accompanies the paper:
-
-> Pankaj Niroula, Lily Gloudemans, Aashutosh Poudel, Collin MacDonald, and
-> Stephen Herwig. *CODoH: Privacy-Preserving Caching for Oblivious DNS over
-> HTTPS.* Proceedings on Privacy Enhancing Technologies (PoPETs), 2026.
+This artifact accompanies the following paper, to appear in the Proceedings on
+Privacy Enhancing Technologies (PoPETs):
 
 ```bibtex
-@article{codoh2026,
+@article{niroula2026codoh,
   title   = {{CODoH}: Privacy-Preserving Caching for Oblivious {DNS} over {HTTPS}},
-  author  = {Niroula, Pankaj and Gloudemans, Lily and Poudel, Aashutosh and
-             MacDonald, Collin and Herwig, Stephen},
+  author  = {Niroula, Pankaj and Gloudemans, Lily and Poudel, Aashutosh and MacDonald, Collin and Herwig, Stephen},
   journal = {Proceedings on Privacy Enhancing Technologies},
   year    = {2026}
 }
@@ -45,6 +41,32 @@ paper, organized as five Git submodules under [`repos/`](repos):
 
 Each submodule is pinned to the `pets26-artifact` tag of its respective
 repository (see [Accessibility](#accessibility)).
+
+### Terminology: the simulator's "lens (a)–(d)" ↔ the paper
+
+The leakage simulator (`repos/codoh-evals`) labels its analyses **lens (a)–(d)**
+throughout its module names, CSV outputs, and console output (including the smoke
+test's §4 lines and the `analyze_*` / `plot_*` scripts). **The paper never uses the
+word "lens."** These are the simulator's internal names for the four questions the
+paper poses in its §"Leakage under Realistic Workloads"; they recur throughout the
+Artifact Evaluation and Reusability sections below, so we define them up front:
+
+- **lens (a)** ↔ *"Single batch: popular vs. tail queries"* — can a single batch
+  identify the victim's page, stratified by popularity band (`analyze_a.py`,
+  `lens_a.csv`).
+- **lens (b)** ↔ *"Within a page load"* — does the union of batches a page load
+  spans leak the page (`analyze_b.py`, `lens_b.csv`, `plot_heatmap.py`).
+- **lens (c)** ↔ *"Returning user: cross-day intersection"* — how fast a stable
+  daily repertoire becomes identifiable, via the day-7 intersection size `|C_7|`
+  (`lens_c.py`, `plot_lens_c.py`, `plot_lens_c_heatmap.py`).
+- **lens (d)** ↔ *"Cover-distribution drift"* — how much (a)–(c) depend on the
+  cover distribution matching the query distribution. In the code this is the
+  **`dsens` / D-sensitivity** analysis (`plot_dsens.py`, `plot_dsens_tiers.py`); it
+  is not a separate attack but a re-run of (a)–(c) with cover distribution
+  `D ∈ {matched, uniform, stale}`. (There is no `lens_d.py`.)
+
+The Strict/Moderate/Permissive **operator tiers** (in `plot_lens_c_heatmap.py`,
+keyed on median `|C_7|`) correspond to the paper's "Operator-tier recommendation."
 
 ### Security/Privacy Issues and Ethical Concerns
 
@@ -233,6 +255,17 @@ commodity HW]** (the paper's *numbers* regenerate on the evaluator's machine), o
 **[Hardware-gated]** (needs the SGX/Azure testbed — out of scope for the requested
 *Available + Functional* badges; see [Limitations](#limitations)).
 
+> **A note on item counts vs. the paper's round numbers.** Across all experiments,
+> the workloads and figures draw from domain lists **pre-filtered to domains that
+> resolve** (return at least one `A` record), per the paper's *Domain lists*
+> methodology. The exact number of sites/domains/records in a shipped data file
+> therefore need not equal the rounded "top-N" quoted in the paper. For example,
+> the page-load figure plots **74 of the 100** sampled sites (the rest failed to
+> resolve or load); the response-size and TTL CDFs hold **one row per resolved
+> record**, so their row counts track the resolvable set rather than the nominal
+> rank cutoff; and the cold/Zipf workloads run over the pre-filtered
+> 10k/1k-domain lists. This is expected filtering, not a discrepancy.
+
 ### Main Results and Claims
 
 #### Main Result 1: Cacheable, end-to-end-encrypted ODoH  *[Demonstrated]*
@@ -361,28 +394,9 @@ The components are useful beyond this paper:
   buffer, attacker model, and parameter-sweep driver are modular, and new
   workloads can be supplied as DNS-trace CSVs.
 
-- **Terminology: the simulator's "lenses" (a)–(d).** The simulator labels its
-  analyses **lens (a)–(d)** throughout its module names, CSV outputs, and console
-  output (including the smoke test's §4 lines and the `analyze_*` / `plot_*`
-  scripts). The paper never uses the word "lens" — these are internal names for
-  the four questions the paper poses in its §"Leakage under Realistic Workloads":
-  - **lens (a)** ↔ *"Single batch: popular vs. tail queries"* —
-    can a single batch identify the victim's page, stratified by popularity band
-    (`analyze_a.py`, `lens_a.csv`).
-  - **lens (b)** ↔ *"Within a page load"* — does the union of batches a page load
-    spans leak the page (`analyze_b.py`, `lens_b.csv`, `plot_heatmap.py`).
-  - **lens (c)** ↔ *"Returning user: cross-day intersection"* — how fast a stable
-    daily repertoire becomes identifiable, via the day-7 intersection size
-    `|C_7|` (`lens_c.py`, `plot_lens_c.py`, `plot_lens_c_heatmap.py`).
-  - **lens (d)** ↔ *"Cover-distribution drift"* — how much (a)–(c) depend on the
-    cover distribution matching the query distribution. In the code this is the
-    **`dsens` / D-sensitivity** analysis (`plot_dsens.py`, `plot_dsens_tiers.py`);
-    it is not a separate attack but a re-run of (a)–(c) with cover distribution
-    `D ∈ {matched, uniform, stale}`. (There is no `lens_d.py`.)
-
-  The Strict/Moderate/Permissive **operator tiers** (in `plot_lens_c_heatmap.py`,
-  keyed on median `|C_7|`) correspond to the paper's "Operator-tier
-  recommendation."
+- **Terminology (lens (a)–(d)).** The simulator's "lens" names map to the paper's
+  four leakage questions — defined under *Description → Terminology* above; (d) is
+  the `dsens` / D-sensitivity re-run (there is no `lens_d.py`).
 
 - **Regenerating the paper's leakage figures from shipped data.** The full
   parameter sweeps take many CPU-hours, so we ship the precomputed aggregate CSVs
@@ -426,24 +440,73 @@ The components are useful beyond this paper:
   The SGX columns of these tables are hardware-gated and out of scope (see
   [Limitations](#limitations)).
 
-- **Reproducing the full paper on your own SGX hardware.** With an SGX-capable
-  Azure VM (or equivalent) and the EGo SDK installed, the testbed can be
-  provisioned and run end-to-end:
+- **Measurement testbed: how the paper's latency numbers were collected.** The
+  macrobenchmarks (Table 3, the latency CDFs, and the Table 9 sweep — all shipped
+  in [`paper-results/`](paper-results)) were taken on a **three-VM, three-region
+  Azure deployment** wired as a standard ODoH path with the CODoH cache added at
+  the proxy. Everything below is reproduced by the
+  `repos/coredns/benchmark/cloud-*.sh` scripts.
 
-  ```bash
-  # On an SGX host with EGo 1.8.1 installed:
-  cd repos/coredns
-  ./benchmark/setup.sh                      # build SGX enclave + all binaries
-  cp benchmark/cloud-env.sh benchmark/cloud-env.local.sh   # set PROXY_IP/TARGET_IP
-  ./benchmark/cloud-provision.sh            # bootstrap the three VMs
-  ./benchmark/cloud-run.sh --standard       # run the latency suite
-  ./benchmark/plot.sh benchmark/results/<run-id>           # regenerate CDFs/tables
+  ```
+  Client  (US North Central, Standard D2alds_v6)
+    │  HTTPS — sequential queries, TLS sessions reused
+    ▼
+  Proxy   (US East, Standard DC4s_v2 — Intel SGX, 112 MiB EPC)
+    ├─ codohproxy ──Unix-socket IPC──▶ enclave (EGo)
+    │                                  ORAM N=1024, covers k=3,
+    │  HTTPS — persistent pool         batch B=10 p=0.1, padding
+    ▼
+  Target  (US Central, Standard D2s_v3)
+    ├─ codohtarget ──▶ Unbound (local recursive resolver) ──▶ authoritative DNS
+    │                  (cache flushed between workloads)
+    └─ on a miss: resolves 1 real + k cover domains and bundles the 1+k
+       responses back to the enclave (also the attestation / key channel)
   ```
 
-  The `cloud-run.sh` and `plot.sh` scripts cover the full configuration/workload
-  matrix (Configs 1--5 over the cold/Zipf/warm workloads) and the
-  figure/table generation pipeline; run them with `--help` for the available
-  options.
+  **Roles.** The *client* VM runs the Go benchmark tool (`codoh-client/odoh-client`,
+  a fork of Cloudflare `odoh-client-go`) and doubles as the orchestrator, driving
+  the other two over SSH; it issues sequential HTTPS queries and writes a per-query
+  latency CSV + a JSON summary (p50/p95/p99, throughput, cache-hit rate) per
+  (config, workload). The *proxy* VM runs `codohproxy` and the SGX **enclave**
+  (built/signed with EGo) that holds the ORAM cache; the two communicate over a
+  Unix-domain socket, and the proxy dispatches the enclave and the target in
+  parallel (the streaming fan-out of §Evaluation). The *target* VM runs
+  `codohtarget` and a local **Unbound** recursive resolver.
+
+  **Upstream resolver (Unbound).** The target's upstream is a *local* Unbound
+  (run on a non-standard port to avoid the systemd-resolved conflict), with DNSSEC
+  validation and remote-control enabled. The orchestrator flushes it between
+  workloads (`unbound-control flush_zone .`) so the cold, Zipf, and warm
+  measurements are independent; the enclave's own cache is **not** flushed, so warm
+  benefits from entries inserted earlier. The upstream is a knob
+  (`cloud-run.sh --resolver unbound|cloudflare|google|HOST:PORT`) — Table 3 uses
+  Unbound; public-resolver variants were also collected.
+
+  **Configs & workloads.** Five configurations (`benchmark/configs/{1..5}-*.sh`):
+  C1 DoH, C2 ODoH, C3 Cached-ODoH, C4 CODoH-noTEE, C5 CODoH — each over three
+  workloads: *cold* (10k unique Umbrella top-10k domains), *Zipf* (10k draws over
+  1k domains, s=1.0), *warm* (10k × `google.com`). 10k queries per run; the first
+  1000 are dropped as warmup (at plot time). Servers are restarted between configs.
+
+  **Reproduce it** (needs an SGX proxy VM + two more VMs; from the client/orchestrator):
+  ```bash
+  cd repos/coredns
+  cp benchmark/cloud-env.sh benchmark/cloud-env.local.sh   # set PROXY_IP, TARGET_IP, SSH, NSGs (gitignored)
+  ./benchmark/cloud-open-ports.sh                           # Azure NSG rules (needs: az login)
+  ./benchmark/cloud-setup.sh target                         # build + install/configure Unbound
+  ./benchmark/cloud-setup.sh proxy                          # build SGX enclave + proxy (EGo)
+  ./benchmark/cloud-setup.sh client                         # build odoh-client
+  ./benchmark/cloud-run.sh --standard --run-id std-01       # orchestrate the config × workload matrix
+  ./benchmark/cloud-collect-logs.sh std-01                  # pull server logs
+  ./benchmark/plot.sh benchmark/results/std-01              # CDFs + LaTeX tables
+  ```
+  `cloud-run.sh` rewrites the Corefiles with the cross-VM IPs, distributes the TLS
+  cert, starts the servers over SSH, runs the client locally, and lands per-query
+  CSV/JSON under `benchmark/results/<run-id>/raw/` — the same layout shipped in
+  `paper-results/table3-latency-cdfs.tar.gz`. Add `--full --sweep-oram --sweep-cover`
+  for the Table 9 sweep; run any script with `--help` for options. (The page-load
+  figure used the same testbed, driving Playwright through `dnscrypt-proxy` on the
+  client.)
 
 - **Authors' measured data for the hardware-dependent results.** So a reviewer can
   inspect and re-plot the paper's measured numbers without renting the SGX/Azure
