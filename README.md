@@ -39,9 +39,9 @@ docker run --rm -it codoh:artifact ./test.sh
 
 The functional test runs the SGX enclave in **simulation mode**, so no
 SGX-capable CPU and no EGo SDK are required. It builds every component, runs the
-Path ORAM and enclave microbenchmarks, reproduces a leakage-analysis figure from
-the included data, and issues live CODoH queries end-to-end (cache miss → cache
-hit). Expected runtime: ~15 min human / <35 min compute.
+Path ORAM, enclave, and leakage-simulator unit tests, and issues live CODoH
+queries end-to-end (cache miss → cache hit). Expected runtime: ~10 min human /
+<25 min compute, ~10–15 GB disk.
 
 See [`ARTIFACT-APPENDIX.md`](ARTIFACT-APPENDIX.md) for expected output, the full
 hardware testbed instructions, and reuse notes.

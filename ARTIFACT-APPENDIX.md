@@ -33,7 +33,7 @@ paper, organized as five Git submodules under [`repos/`](repos):
 
 | Submodule | Role in the paper | Backs |
 | --- | --- | --- |
-| [`repos/coredns`](repos/coredns) | CODoH server: `codohproxy` + `codohtarget` CoreDNS plugins and the SGX enclave (EGo), plus the benchmark and Azure testbed scripts. | §6 Implementation; Table 3 (latency); Tables 4–7 (microbenchmarks); latency CDFs |
+| [`repos/coredns`](repos/coredns) | CODoH server: `codohproxy` + `codohtarget` CoreDNS plugins and the SGX enclave (EGo), plus the benchmark and Azure testbed scripts. | §6 Implementation; Table 3 (latency); Tables 4–8 (microbenchmarks); latency CDFs |
 | [`repos/codoh-client`](repos/codoh-client) | CODoH client and latency benchmark tool (a fork of Cloudflare `odoh-client-go`). | §7 measurement client; Table 3 driver |
 | [`repos/dnscrypt-proxy`](repos/dnscrypt-proxy) | Local DNS proxy with CODoH support; drives real browser page loads. | §7 Page-Load Benchmarks (per-site figure) |
 | [`repos/codoh-evals`](repos/codoh-evals) | Trace-driven leakage simulator (lenses a–d) + plotting; Playwright crawl harness. | §7 Leakage under Realistic Workloads; App. leakage and cover-drift figures |
@@ -78,7 +78,8 @@ for the evaluator's machine. Two minor points worth noting:
   resolves a small number of real domain names through a public recursive
   resolver (default `8.8.8.8:53`) and a local CoreDNS instance. No personal data
   is sent; only DNS queries for public domains drawn from the Cisco Umbrella
-  Top-1M list. The evaluator may change or disable the upstream resolver.
+  top-10k (resolvable) ranking. The evaluator may change or disable the upstream
+  resolver.
 - **Self-signed TLS certificates.** The local test stack generates a throwaway
   self-signed certificate (`localhost.pem`) used only inside the container/loopback
   for the demo endpoints. It is not installed into any system trust store.
@@ -94,11 +95,11 @@ user models. It contains no human-subjects data, so no IRB/ethics review applies
 **For the functional evaluation (this artifact's claimed scope):** a commodity
 x86-64 machine. No special hardware is required — the SGX enclave runs in
 **simulation mode**, so neither an SGX-capable CPU nor the EGo SDK is needed.
-Recommended: 4 CPU cores, 8 GB RAM, 15 GB free disk.
+Recommended: 8 CPU cores, 16 GB RAM, 15 GB free disk.
 
 **For reproducing the paper's hardware-dependent results (not claimed here):**
 the latency results (Table 3), the SGX columns of the microbenchmark tables
-(Tables 4, 5, and 7), and the page-load figure were produced on an Azure testbed of
+(Tables 4, 5, 6, and 7), and the page-load figure were produced on an Azure testbed of
 three VMs in separate US regions:
 
 - **Proxy:** Standard DC4s v2 (4 vCPU, 16 GiB, 112 MiB EPC) **with Intel SGX**.
@@ -141,8 +142,11 @@ hardware.
 - **Datasets:** all data needed for the functional test is included in the
   submodules — the leakage simulator's input traces and aggregated CSVs are
   checked in (the CrUX Top-1M cover universe is shipped gzipped at
-  `repos/codoh-evals/data/crux-202603.csv.gz`), and the benchmark domain list
-  is fetched once from Cisco Umbrella during build.
+  `repos/codoh-evals/data/crux-202603.csv.gz`), and the benchmark domain list is
+  a checked-in Umbrella-format ranking
+  (`repos/codoh-evals/data/umbrella-top-10k-resolvable.csv`), from which the
+  Dockerfile slices the small demo query/cover lists — no download happens during
+  the build.
 - **ML models:** none.
 
 ### Estimated Time and Storage Consumption
@@ -153,7 +157,7 @@ hardware.
 | `docker build` | 2 min | 10–20 min | ~5 GB image |
 | `./test.sh` (full smoke test) | 2 min | ~1–2 min | <1 GB |
 
-Total: roughly **10 minutes of human time** and **under 25 minutes of compute**,
+Total: **under 10 minutes of human time** and **under 25 minutes of compute**,
 on **~10–15 GB** of disk.
 
 ## Environment
@@ -294,7 +298,8 @@ The **Plain (non-SGX) columns** of Table 4 (crypto) and Table 5 (cache), and the
 plain-mode PathORAM-vs-linear-scan crossover (Table 10, plain counterpart of
 Table 6) reproduce on the evaluator's CPU — **Experiment 4**. The **SGX columns**
 of Tables 4, 5, 6, and 7 are **Hardware-gated**. The authors' own plain-column
-runs are archived in [`paper-results/`](paper-results) for inspection.
+runs for Tables 4, 5, 7, and 8 are archived in [`paper-results/`](paper-results)
+for inspection; Table 8 (padding) is a wire-size measurement with no SGX variant.
 
 #### Main Result 5: Leakage under realistic workloads (§7; appendix figures)  *[Reproduced on commodity HW]*
 The simulator's quantitative findings behind the paper's parameter recommendations:
@@ -364,18 +369,18 @@ hardware and are therefore out of scope for evaluation:
 - **End-to-end latency (Table 3) and the page-load figure** require the
   three-VM, cross-region Azure testbed with an SGX-capable proxy; the numbers are
   sensitive to wide-area network latency between specific Azure regions.
-- **The SGX columns of Tables 4, 5, and 7** (per-operation latency *inside* the enclave,
-  cache access under SGX, IPC under SGX) require running on real Intel SGX
-  hardware via EGo; in simulation mode there is no enclave-transition or EPC
-  paging cost to measure.
+- **The SGX columns of Tables 4, 5, 6, and 7** (per-operation latency *inside* the
+  enclave, cache access under SGX, ORAM vs. linear scan under SGX, IPC under SGX)
+  require running on real Intel SGX hardware via EGo; in simulation mode there is
+  no enclave-transition or EPC paging cost to measure.
 
 What *is* exercised by the functional test fully demonstrates that the system
 works: the complete CODoH protocol runs end-to-end (enclave cache lookup, cover
 insertion, ORAM-backed storage, batched commits, padding, and client
 decryption), and the leakage analysis that underpins the paper's parameter
 recommendations is reproduced from the included data. The plain-mode
-microbenchmark columns (Table 4, plus the plain-mode oblivious-primitive results
-in Table 10) are also reproducible on the evaluator's CPU (see
+microbenchmark columns (Tables 4 and 5, plus the plain-mode oblivious-primitive
+results in Table 10) are also reproducible on the evaluator's CPU (see
 [Notes on Reusability](#notes-on-reusability) for the commands). The scripts for
 the full hardware experiments are included for completeness and reuse (see below).
 
@@ -529,5 +534,6 @@ The components are useful beyond this paper:
   archive-to-figure/table map and the extract / verify / re-plot commands. The
   leakage data (Main Result 5) is **not** archived there — it ships uncompressed in
   `repos/codoh-evals` and regenerates via the figure commands above. The SGX
-  columns of Tables 4--7 and Table 10 are not recoverable from any repository (see
+  columns of Tables 4--7, and the raw data behind Table 10 (plain-mode oblivious
+  primitives), are not recoverable from any repository (see
   [Limitations](#limitations)).
